@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+set -a
+. /etc/music/music.env
+set +a
+
+APP_DIR=/var/www/music.benlocher.com
+REPO_DIR=/var/repo/music.benlocher.com.git
+PYTHON=/usr/bin/python3.13
+
+mkdir -p "$APP_DIR"
+git --work-tree="$APP_DIR" --git-dir="$REPO_DIR" checkout -f main
+
+cd "$APP_DIR"
+rm -rf .venv
+"$PYTHON" -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r backend/requirements.txt --no-cache-dir
+
+cd frontend
+npm ci
+npm run build
+cd ..
+
+.venv/bin/python backend/manage.py migrate --no-input
+.venv/bin/python backend/manage.py collectstatic --noinput --clear
+
+systemctl restart music
+systemctl restart music-celery
+systemctl is-active --quiet music
+systemctl is-active --quiet music-celery

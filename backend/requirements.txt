@@ -1,0 +1,12 @@
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+django-cors-headers>=4.7,<5
+dj-database-url>=3,<4
+psycopg[binary]>=3.2,<4
+cryptography>=45,<47
+requests>=2.32,<3
+celery[redis]>=5.5,<6
+gunicorn>=23,<24
+uvicorn>=0.35,<0.36
+Pillow>=11,<12
+whitenoise>=6.9,<7

@@ -1,0 +1,20 @@
+[Unit]
+Description=Benjamin Locher Music background worker
+After=network.target postgresql.service redis-server.service
+Requires=music.service
+
+[Service]
+Type=simple
+User=music
+Group=music
+WorkingDirectory=/var/www/music.benlocher.com/backend
+EnvironmentFile=/etc/music/music.env
+ExecStart=/var/www/music.benlocher.com/.venv/bin/celery -A config worker --loglevel=INFO --concurrency=1
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/music /var/log/music
+
+[Install]
+WantedBy=multi-user.target

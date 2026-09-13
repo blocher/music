@@ -1,0 +1,19 @@
+[Unit]
+Description=Benjamin Locher Music Django application
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=music
+Group=music
+WorkingDirectory=/var/www/music.benlocher.com/backend
+EnvironmentFile=/etc/music/music.env
+ExecStart=/var/www/music.benlocher.com/.venv/bin/gunicorn config.asgi:application --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:8005 --access-logfile /var/log/music/access.log --error-logfile /var/log/music/error.log
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/music /var/log/music
+
+[Install]
+WantedBy=multi-user.target
