@@ -78,13 +78,17 @@ def logout_view(request):
 
 
 def album_queryset(public_only=False):
-    queryset = Album.objects.select_related("artist").annotate(
-        track_count=Count("album_tracks"),
-        duration_seconds=Coalesce(
-            Sum("album_tracks__track__duration_seconds"),
-            0,
-            output_field=DecimalField(max_digits=12, decimal_places=3),
-        ),
+    queryset = (
+        Album.objects.select_related("artist")
+        .annotate(
+            track_count=Count("album_tracks"),
+            duration_seconds=Coalesce(
+                Sum("album_tracks__track__duration_seconds"),
+                0,
+                output_field=DecimalField(max_digits=12, decimal_places=3),
+            ),
+        )
+        .order_by("-release_date", "-created_at")
     )
     return queryset.filter(public=True) if public_only else queryset
 
