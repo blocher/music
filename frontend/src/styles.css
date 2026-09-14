@@ -160,6 +160,9 @@ img { display: block; max-width: 100%; }
 .banner.success { margin: 0 0 22px; border-color: rgba(45, 123, 82, 0.35); color: var(--green); background: var(--green-soft); }
 .banner.success svg { color: var(--green); }
 .banner.success button { margin-left: auto; border: 0; background: none; cursor: pointer; }
+.sync-banner span, .banner.error span { display: grid; gap: 3px; }
+.sync-banner strong, .banner.error strong { color: var(--ink); }
+.sync-banner small, .banner.error small { color: var(--muted); }
 .studio-metrics { margin: 0 4vw; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .studio-metrics > div { min-height: 128px; padding: 24px; display: grid; align-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); box-shadow: 0 3px 10px rgba(46, 39, 27, 0.05); }
 .studio-metrics > div:nth-child(2) { background: var(--blue-soft); }

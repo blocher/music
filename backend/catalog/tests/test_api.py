@@ -3,7 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from catalog.models import Album, AlbumTrack, Artist, AuditEvent, DistributionSubmission, PlatformLink, Track
+from catalog.models import Album, AlbumTrack, Artist, AuditEvent, DistributionSubmission, PlatformLink, SyncRun, Track
 
 
 class PublicCatalogApiTests(TestCase):
@@ -121,3 +121,18 @@ class StudioAlbumDeleteApiTests(TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertTrue(Album.objects.filter(pk=album.pk).exists())
+
+
+class StudioSyncRunApiTests(TestCase):
+    def test_latest_sync_run_is_returned_first_for_progress_polling(self):
+        client = APIClient()
+        user = get_user_model().objects.create_user(username="ben-sync", password="secret", is_staff=True)
+        client.force_authenticate(user)
+        old_run = SyncRun.objects.create(status=SyncRun.Status.SUCCEEDED)
+        current_run = SyncRun.objects.create(status=SyncRun.Status.QUEUED)
+
+        response = client.get("/api/studio/sync-runs/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["id"], current_run.id)
+        self.assertNotEqual(response.json()[0]["id"], old_run.id)

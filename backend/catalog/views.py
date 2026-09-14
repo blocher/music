@@ -429,7 +429,7 @@ def verify_integration(request, service):
 @permission_classes([IsStudioAdmin])
 def sync_runs(request):
     if request.method == "GET":
-        return Response(SyncRunSerializer(SyncRun.objects.all()[:20], many=True).data)
+        return Response(SyncRunSerializer(SyncRun.objects.order_by("-created_at", "-pk")[:20], many=True).data)
     run = SyncRun.objects.create()
     transaction.on_commit(lambda: sync_suno_task.delay(run.pk))
     return Response(SyncRunSerializer(run).data, status=status.HTTP_202_ACCEPTED)

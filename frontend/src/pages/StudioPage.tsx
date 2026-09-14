@@ -45,7 +45,11 @@ export function StudioPage() {
   const startSync = async () => {
     setError("");
     setSyncing(true);
-    try { await post("/api/studio/sync-runs/", {}); await load(); }
+    try {
+      const run = await post<SyncRun>("/api/studio/sync-runs/", {});
+      setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
+      await load();
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Sync failed."); setSyncing(false); }
   };
   const latest = runs[0];
@@ -57,6 +61,8 @@ export function StudioPage() {
         <button className="primary-button" disabled={!suno?.connected || syncing} onClick={startSync}><RefreshCw className={syncing ? "spinning" : ""} />{syncing ? "Syncing Suno…" : "Sync from Suno"}</button>
       </section>
       {error && <div className="banner error"><CircleAlert />{error}</div>}
+      {syncing && <div className="banner sync-banner" role="status" aria-live="polite"><RefreshCw className="spinning" /><span><strong>{latest?.status === "running" ? "Syncing your Suno playlists…" : "Suno sync queued…"}</strong><small>You can stay here; albums and song counts update automatically when the sync finishes.</small></span></div>}
+      {!syncing && latest?.status === "failed" && <div className="banner error"><CircleAlert /><span><strong>Suno sync did not finish.</strong><small>{latest.error || "Check the saved Suno session and try again."}</small></span></div>}
       {!suno?.connected && <div className="banner"><Settings2 /><span>Connect Suno before the first sync. Passwords are never stored.</span><Link to="/studio/integrations">Open integrations <ArrowRight /></Link></div>}
       <section className="studio-metrics">
         <div><span className="eyebrow">Suno sync</span><strong>{latest?.status || "Not run"}</strong><small>{latest ? new Date(latest.created_at).toLocaleString() : "Connect to begin"}</small></div>
