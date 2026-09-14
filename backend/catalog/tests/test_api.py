@@ -1,3 +1,6 @@
+from datetime import date
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
@@ -17,6 +20,18 @@ class PublicCatalogApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([album["title"] for album in response.json()], ["Public"])
+
+    def test_albums_are_sorted_by_assigned_release_date_with_undated_last(self):
+        Album.objects.all().delete()
+        Album.objects.create(artist=self.artist, title="Old", slug="old", public=True, release_date=date(2024, 1, 1))
+        Album.objects.create(artist=self.artist, title="Undated", slug="undated", public=True)
+        Album.objects.create(
+            artist=self.artist, title="Newest", slug="newest", public=True, release_date=date(2026, 8, 1)
+        )
+
+        response = APIClient().get("/api/public/albums/")
+
+        self.assertEqual([album["title"] for album in response.json()], ["Newest", "Old", "Undated"])
 
 
 class StudioAuthApiTests(TestCase):
@@ -136,3 +151,26 @@ class StudioSyncRunApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]["id"], current_run.id)
         self.assertNotEqual(response.json()[0]["id"], old_run.id)
+
+    @patch("catalog.views.sync_suno_task.delay")
+    def test_full_sync_mode_is_saved_and_queued(self, delay):
+        client = APIClient()
+        user = get_user_model().objects.create_user(username="ben-full-sync", password="secret", is_staff=True)
+        client.force_authenticate(user)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = client.post("/api/studio/sync-runs/", {"mode": "full"}, format="json")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["mode"], SyncRun.Mode.FULL)
+        delay.assert_called_once_with(response.json()["id"])
+
+    def test_invalid_sync_mode_is_rejected(self):
+        client = APIClient()
+        user = get_user_model().objects.create_user(username="ben-invalid-sync", password="secret", is_staff=True)
+        client.force_authenticate(user)
+
+        response = client.post("/api/studio/sync-runs/", {"mode": "replace-everything"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SyncRun.objects.count(), 0)

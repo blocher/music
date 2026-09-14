@@ -5,13 +5,19 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.text import slugify
 
+from .integrations.musixmatch import MusixmatchClient, MusixmatchPartnerAccessRequired
+from .integrations.openai import OpenAIClient
 from .integrations.suno import SunoClient
 from .integrations.too_lost import TooLostClient
-from .integrations.openai import OpenAIClient
-from .integrations.musixmatch import MusixmatchClient, MusixmatchPartnerAccessRequired
-from .lyrics import align_transcription_to_lyrics, lyric_text_similarity, normalize_suno_alignment, timed_lyrics_payload
+from .lyrics import (
+    align_transcription_to_lyrics,
+    lyric_text_similarity,
+    normalize_suno_alignment,
+    timed_lyrics_payload,
+)
 from .models import (
     Album,
     AlbumTrack,
@@ -45,6 +51,35 @@ def _is_primary_clip(clip: dict) -> bool:
     return clip_type not in {"stem", "persona"} and task not in {"gen_stem", "stem"}
 
 
+def _suno_date(payload: dict):
+    metadata = payload.get("metadata") or {}
+    value = (
+        payload.get("created_at") or payload.get("createdAt") or payload.get("created") or metadata.get("created_at")
+    )
+    if not value:
+        return None
+    if parsed := parse_datetime(str(value)):
+        return parsed.date()
+    return parse_date(str(value)[:10])
+
+
+def _suno_track_values(clip: dict, artist: Artist) -> dict:
+    metadata = clip.get("metadata") or {}
+    title = clip.get("title") or "Untitled track"
+    return {
+        "artist": artist,
+        "title": title,
+        "description": metadata.get("gpt_description_prompt") or clip.get("gpt_description_prompt") or "",
+        "release_date": _suno_date(clip),
+        "lyrics": metadata.get("prompt") or clip.get("lyric") or clip.get("prompt") or "",
+        "instrumental": bool(metadata.get("make_instrumental")),
+        "duration_seconds": clip.get("duration") or metadata.get("duration"),
+        "source_audio_url": clip.get("audio_url", ""),
+        "source_image_url": clip.get("image_url", ""),
+        "source_payload": clip,
+    }
+
+
 @transaction.atomic
 def sync_suno(run: SyncRun) -> SyncRun:
     run.status = SyncRun.Status.RUNNING
@@ -55,6 +90,9 @@ def sync_suno(run: SyncRun) -> SyncRun:
     playlist_clip_ids: set[str] = set()
     album_count = 0
     track_count = 0
+    albums_created = 0
+    tracks_created = 0
+    tracks_refreshed = 0
 
     for playlist_summary in client.playlists():
         playlist_id = str(playlist_summary.get("id") or playlist_summary.get("playlist_id") or "")
@@ -62,7 +100,15 @@ def sync_suno(run: SyncRun) -> SyncRun:
             continue
         payload = client.playlist(playlist_id)
         title = payload.get("name") or payload.get("title") or playlist_summary.get("name") or "Untitled album"
+        source_clips = [
+            (_clip_from_item(item), position)
+            for position, item in enumerate(payload.get("playlist_clips", []), start=1)
+            if str(_clip_from_item(item).get("id") or "")
+        ]
+        clip_dates = [_suno_date(clip) for clip, _ in source_clips]
+        latest_clip_date = max((value for value in clip_dates if value), default=_suno_date(payload))
         album = Album.objects.filter(suno_playlist_id=playlist_id).first()
+        album_created = album is None
         if not album:
             album = Album.objects.create(
                 artist=artist,
@@ -71,54 +117,73 @@ def sync_suno(run: SyncRun) -> SyncRun:
                 slug=_unique_slug(Album, title, playlist_id),
                 description=payload.get("description", ""),
                 source_cover_url=payload.get("image_url", ""),
+                release_date=latest_clip_date,
                 source_payload=payload,
             )
+            albums_created += 1
         else:
             album.source_payload = payload
-            album.source_cover_url = payload.get("image_url", album.source_cover_url)
-            album.save(update_fields=["source_payload", "source_cover_url", "updated_at"])
+            update_fields = ["source_payload", "updated_at"]
+            if run.mode == SyncRun.Mode.FULL:
+                album.title = title
+                album.description = payload.get("description", "")
+                album.source_cover_url = payload.get("image_url", "")
+                album.release_date = latest_clip_date
+                update_fields += ["title", "description", "source_cover_url", "release_date"]
+            album.save(update_fields=update_fields)
         album_count += 1
 
         ordered_tracks = []
-        for position, item in enumerate(payload.get("playlist_clips", []), start=1):
-            clip = _clip_from_item(item)
+        for clip, position in source_clips:
             clip_id = str(clip.get("id") or "")
-            if not clip_id:
-                continue
             playlist_clip_ids.add(clip_id)
-            metadata = clip.get("metadata") or {}
+            values = _suno_track_values(clip, artist)
             track, created = Track.objects.get_or_create(
                 suno_clip_id=clip_id,
                 defaults={
-                    "artist": artist,
-                    "title": clip.get("title") or "Untitled track",
-                    "slug": _unique_slug(Track, clip.get("title") or "Untitled track", clip_id),
-                    "description": metadata.get("gpt_description_prompt") or clip.get("gpt_description_prompt") or "",
-                    "lyrics": metadata.get("prompt") or clip.get("lyric") or clip.get("prompt") or "",
-                    "instrumental": bool(metadata.get("make_instrumental")),
+                    **values,
+                    "slug": _unique_slug(Track, values["title"], clip_id),
                 },
             )
-            track.source_audio_url = clip.get("audio_url", track.source_audio_url)
-            track.source_image_url = clip.get("image_url", track.source_image_url)
-            track.duration_seconds = clip.get("duration") or metadata.get("duration") or track.duration_seconds
             track.source_payload = clip
-            track.save(
-                update_fields=[
+            update_fields = ["source_payload", "updated_at"]
+            if created:
+                tracks_created += 1
+            elif run.mode == SyncRun.Mode.FULL:
+                for field, value in values.items():
+                    if field != "artist":
+                        setattr(track, field, value)
+                update_fields += [
+                    "title",
+                    "description",
+                    "release_date",
+                    "lyrics",
+                    "instrumental",
                     "source_audio_url",
                     "source_image_url",
                     "duration_seconds",
-                    "source_payload",
-                    "updated_at",
                 ]
-            )
+                tracks_refreshed += 1
+            track.save(update_fields=update_fields)
             ordered_tracks.append((track, position))
             track_count += 1
 
         if album.status in {Album.Status.DRAFT, Album.Status.READY}:
-            AlbumTrack.objects.filter(album=album).delete()
-            AlbumTrack.objects.bulk_create(
-                [AlbumTrack(album=album, track=track, position=position) for track, position in ordered_tracks]
-            )
+            if run.mode == SyncRun.Mode.FULL or album_created:
+                AlbumTrack.objects.filter(album=album).delete()
+                AlbumTrack.objects.bulk_create(
+                    [AlbumTrack(album=album, track=track, position=position) for track, position in ordered_tracks]
+                )
+            else:
+                existing_ids = set(album.album_tracks.values_list("track_id", flat=True))
+                next_position = (
+                    album.album_tracks.order_by("-position").values_list("position", flat=True).first() or 0
+                ) + 1
+                for track, _ in ordered_tracks:
+                    if track.pk not in existing_ids:
+                        AlbumTrack.objects.create(album=album, track=track, position=next_position)
+                        existing_ids.add(track.pk)
+                        next_position += 1
 
     all_clip_ids = {str(clip.get("id")) for clip in client.clips() if clip.get("id") and _is_primary_clip(clip)}
     run.status = SyncRun.Status.SUCCEEDED
@@ -126,7 +191,14 @@ def sync_suno(run: SyncRun) -> SyncRun:
     run.albums_seen = album_count
     run.tracks_seen = track_count
     run.loose_tracks_excluded = len(all_clip_ids - playlist_clip_ids)
-    run.details = {"playlist_clip_ids": len(playlist_clip_ids), "account": client.account()}
+    run.details = {
+        "mode": run.mode,
+        "albums_created": albums_created,
+        "tracks_created": tracks_created,
+        "tracks_refreshed": tracks_refreshed,
+        "playlist_clip_ids": len(playlist_clip_ids),
+        "account": client.account(),
+    }
     run.save()
     return run
 
@@ -193,6 +265,7 @@ def release_payload(album: Album) -> dict:
         track = album_track.track
         item = {
             "title": track.title,
+            "release_date": track.release_date.isoformat() if track.release_date else None,
             "position": album_track.position,
             "artists": [{"name": album.artist.name, "role": "primary"}],
             "explicit": track.explicit,
@@ -269,7 +342,9 @@ def _save_links(instance, links) -> None:
         if not isinstance(link, dict):
             continue
         url = link.get("url") or link.get("link") or link.get("href") or link.get("store_url")
-        platform = link.get("platform") or link.get("store") or link.get("store_name") or link.get("dsp") or link.get("name")
+        platform = (
+            link.get("platform") or link.get("store") or link.get("store_name") or link.get("dsp") or link.get("name")
+        )
         if not url or not platform:
             continue
         PlatformLink.objects.update_or_create(

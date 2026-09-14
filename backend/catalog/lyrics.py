@@ -151,6 +151,7 @@ def timed_lyrics_payload(track) -> dict:
     return {
         "artist": track.artist.name,
         "title": track.title,
+        "release_date": track.release_date.isoformat() if track.release_date else None,
         "isrc": track.isrc,
         "too_lost_track_id": track.too_lost_track_id,
         "plain_lyrics": track.lyrics,

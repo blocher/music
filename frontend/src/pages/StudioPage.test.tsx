@@ -11,7 +11,7 @@ const response = (payload: unknown) => ({ ok: true, status: 200, json: async () 
 describe("StudioPage", () => {
   it("keeps visible progress after a Suno sync is queued", async () => {
     let syncStarted = false;
-    const currentRun = { id: 2, status: "queued", albums_seen: 0, tracks_seen: 0, loose_tracks_excluded: 0, created_at: "2026-09-14T03:00:00Z", error: "" };
+    const currentRun = { id: 2, mode: "incremental", status: "queued", albums_seen: 0, tracks_seen: 0, loose_tracks_excluded: 0, created_at: "2026-09-14T03:00:00Z", error: "" };
     const oldRun = { ...currentRun, id: 1, status: "succeeded", created_at: "2026-09-13T03:00:00Z" };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
       const url = String(input);
@@ -27,11 +27,11 @@ describe("StudioPage", () => {
     }));
 
     render(<MemoryRouter><StudioPage /></MemoryRouter>);
-    const button = await screen.findByRole("button", { name: /sync from suno/i });
+    const button = await screen.findByRole("button", { name: /sync new from suno/i });
 
     fireEvent.click(button);
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Suno sync queued/i));
-    expect(screen.getByRole("button", { name: /Syncing Suno/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/New-song Suno sync queued/i));
+    expect(screen.getByRole("button", { name: /Syncing new songs/i })).toBeDisabled();
   });
 });

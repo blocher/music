@@ -153,6 +153,14 @@ img { display: block; max-width: 100%; }
 .studio-title-row { padding: 55px 4vw 40px; display: flex; justify-content: space-between; align-items: end; gap: 40px; }
 .studio-title-row h1, .page-intro h1, .editor-panel h1 { margin: 8px 0 12px; font: 400 clamp(52px, 6vw, 84px)/0.92 var(--display); }
 .studio-title-row p, .page-intro p, .editor-panel header p { color: var(--muted); font-size: 17px; margin: 0; }
+
+.sync-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .banner { margin: 0 4vw 22px; border: 1px solid rgba(245, 188, 43, 0.7); border-radius: 12px; padding: 15px 18px; display: flex; align-items: center; gap: 13px; background: var(--yellow-soft); }
 .banner svg { color: var(--coral); flex: none; }
 .banner a { margin-left: auto; display: flex; align-items: center; gap: 7px; color: var(--green); font-weight: 800; }

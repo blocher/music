@@ -27,6 +27,7 @@ export type Track = {
   title: string;
   slug: string;
   description: string;
+  release_date: string | null;
   lyrics: string;
   timed_lyrics: TimedLyric[];
   lyrics_alignment_source: string;

@@ -22,11 +22,11 @@ from catalog.services import (
     clone_album_for_replacement,
     create_submission,
     create_takedown_submission,
+    prepare_album_lyrics_delivery,
     suno_download_budget,
     sync_suno,
-    validate_release,
-    prepare_album_lyrics_delivery,
     sync_track_lyrics,
+    validate_release,
 )
 
 
@@ -122,14 +122,16 @@ class CatalogServiceTests(TestCase):
         apply_distribution_update(
             album,
             {
-                "storeLinks": {
-                    "Spotify": {"href": "https://open.spotify.com/album/123", "store_id": "123"}
-                },
+                "storeLinks": {"Spotify": {"href": "https://open.spotify.com/album/123", "store_id": "123"}},
                 "tracks": [
                     {
                         "isrc": track.isrc,
                         "platformLinks": [
-                            {"store_name": "Apple", "store_url": "https://music.apple.com/song/456", "platform_id": "456"}
+                            {
+                                "store_name": "Apple",
+                                "store_url": "https://music.apple.com/song/456",
+                                "platform_id": "456",
+                            }
                         ],
                     }
                 ],
@@ -172,6 +174,139 @@ class CatalogServiceTests(TestCase):
         self.assertEqual(run.loose_tracks_excluded, 1)
         self.assertTrue(Track.objects.filter(suno_clip_id="clip-1").exists())
         self.assertFalse(Track.objects.filter(suno_clip_id="loose-clip").exists())
+
+    @patch("catalog.services.load_credentials", return_value={"session_id": "session", "cookie": "cookie"})
+    @patch("catalog.services.SunoClient")
+    def test_sync_defaults_track_and_album_dates_from_suno_creation_dates(self, client_class, _credentials):
+        client = client_class.return_value
+        client.playlists.return_value = iter([{"id": "playlist-1", "name": "Family"}])
+        client.playlist.return_value = {
+            "id": "playlist-1",
+            "name": "Family",
+            "playlist_clips": [
+                {"clip": {"id": "clip-new", "title": "New", "created_at": "2026-08-20T12:00:00Z"}},
+                {"clip": {"id": "clip-old", "title": "Old", "created_at": "2025-03-01T12:00:00Z"}},
+            ],
+        }
+        client.clips.return_value = iter([])
+        client.account.return_value = {}
+
+        sync_suno(SyncRun.objects.create())
+
+        self.assertEqual(str(Track.objects.get(suno_clip_id="clip-new").release_date), "2026-08-20")
+        self.assertEqual(str(Track.objects.get(suno_clip_id="clip-old").release_date), "2025-03-01")
+        self.assertEqual(str(Album.objects.get(suno_playlist_id="playlist-1").release_date), "2026-08-20")
+
+    @patch("catalog.services.load_credentials", return_value={"session_id": "session", "cookie": "cookie"})
+    @patch("catalog.services.SunoClient")
+    def test_incremental_sync_preserves_metadata_and_existing_order_while_adding_tracks(
+        self, client_class, _credentials
+    ):
+        album = Album.objects.create(
+            artist=self.artist,
+            suno_playlist_id="playlist-1",
+            title="My album title",
+            slug="family",
+            description="My album notes",
+            release_date="2026-12-24",
+        )
+        existing = self.track("My song title", "clip-1", "USAAA2600001")
+        existing.description = "My song notes"
+        existing.release_date = "2026-12-23"
+        existing.save()
+        AlbumTrack.objects.create(album=album, track=existing, position=1)
+        client = client_class.return_value
+        client.playlists.return_value = iter([{"id": "playlist-1", "name": "Suno album title"}])
+        client.playlist.return_value = {
+            "id": "playlist-1",
+            "name": "Suno album title",
+            "description": "Suno album notes",
+            "playlist_clips": [
+                {"clip": {"id": "clip-2", "title": "New song", "created_at": "2026-09-02T12:00:00Z"}},
+                {"clip": {"id": "clip-1", "title": "Suno song title", "created_at": "2026-09-01T12:00:00Z"}},
+            ],
+        }
+        client.clips.return_value = iter([])
+        client.account.return_value = {}
+
+        sync_suno(SyncRun.objects.create(mode=SyncRun.Mode.INCREMENTAL))
+
+        album.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(
+            (album.title, album.description, str(album.release_date)),
+            ("My album title", "My album notes", "2026-12-24"),
+        )
+        self.assertEqual(
+            (existing.title, existing.description, str(existing.release_date), existing.isrc),
+            ("My song title", "My song notes", "2026-12-23", "USAAA2600001"),
+        )
+        self.assertEqual(
+            list(album.album_tracks.order_by("position").values_list("track__suno_clip_id", flat=True)),
+            ["clip-1", "clip-2"],
+        )
+
+    @patch("catalog.services.load_credentials", return_value={"session_id": "session", "cookie": "cookie"})
+    @patch("catalog.services.SunoClient")
+    def test_full_sync_refreshes_suno_metadata_and_order_but_preserves_distribution_ids(
+        self, client_class, _credentials
+    ):
+        album = Album.objects.create(
+            artist=self.artist,
+            suno_playlist_id="playlist-1",
+            title="My album title",
+            slug="family",
+            release_date="2026-12-24",
+        )
+        existing = self.track("My song title", "clip-1", "USAAA2600001")
+        existing.description = "My song notes"
+        existing.release_date = "2026-12-23"
+        existing.too_lost_track_id = "too-lost-track-1"
+        existing.save()
+        second = self.track("Second", "clip-2")
+        AlbumTrack.objects.create(album=album, track=existing, position=1)
+        AlbumTrack.objects.create(album=album, track=second, position=2)
+        client = client_class.return_value
+        client.playlists.return_value = iter([{"id": "playlist-1", "name": "Suno album title"}])
+        client.playlist.return_value = {
+            "id": "playlist-1",
+            "name": "Suno album title",
+            "description": "Suno album notes",
+            "playlist_clips": [
+                {"clip": {"id": "clip-2", "title": "Second refreshed", "created_at": "2026-09-02T12:00:00Z"}},
+                {
+                    "clip": {
+                        "id": "clip-1",
+                        "title": "Suno song title",
+                        "created_at": "2026-09-01T12:00:00Z",
+                        "metadata": {"gpt_description_prompt": "Suno song notes"},
+                    }
+                },
+            ],
+        }
+        client.clips.return_value = iter([])
+        client.account.return_value = {}
+
+        sync_suno(SyncRun.objects.create(mode=SyncRun.Mode.FULL))
+
+        album.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(
+            (album.title, album.description, str(album.release_date)),
+            ("Suno album title", "Suno album notes", "2026-09-02"),
+        )
+        self.assertEqual(
+            (existing.title, existing.description, str(existing.release_date)),
+            ("Suno song title", "Suno song notes", "2026-09-01"),
+        )
+        self.assertEqual(
+            (existing.slug, existing.isrc, existing.too_lost_track_id),
+            ("my-song-title", "USAAA2600001", "too-lost-track-1"),
+        )
+        self.assertEqual(
+            list(album.album_tracks.order_by("position").values_list("track__suno_clip_id", flat=True)),
+            ["clip-2", "clip-1"],
+        )
 
     @patch("catalog.services.load_credentials", return_value={"monthly_download_limit": "20"})
     def test_download_budget_counts_confirmed_tracks_once(self, _credentials):

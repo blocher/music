@@ -55,6 +55,7 @@ class TrackSerializer(serializers.ModelSerializer):
             "title",
             "slug",
             "description",
+            "release_date",
             "lyrics",
             "timed_lyrics",
             "lyrics_alignment_source",

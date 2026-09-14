@@ -78,6 +78,7 @@ class Track(TimestampedModel):
     title = models.CharField(max_length=240)
     slug = models.SlugField(max_length=240)
     description = models.TextField(blank=True)
+    release_date = models.DateField(null=True, blank=True, db_index=True)
     lyrics = models.TextField(blank=True)
     timed_lyrics = models.JSONField(default=list, blank=True)
     cover = models.ImageField(upload_to="tracks/covers/", blank=True)
@@ -164,6 +165,10 @@ class IntegrationCredential(TimestampedModel):
 
 
 class SyncRun(TimestampedModel):
+    class Mode(models.TextChoices):
+        INCREMENTAL = "incremental", "New songs only"
+        FULL = "full", "Refresh all Suno metadata"
+
     class Status(models.TextChoices):
         QUEUED = "queued", "Queued"
         RUNNING = "running", "Running"
@@ -171,6 +176,7 @@ class SyncRun(TimestampedModel):
         FAILED = "failed", "Failed"
 
     service = models.CharField(max_length=32, default="suno")
+    mode = models.CharField(max_length=24, choices=Mode.choices, default=Mode.INCREMENTAL)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

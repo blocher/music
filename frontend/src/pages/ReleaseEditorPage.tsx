@@ -142,7 +142,7 @@ function MetadataPanel({ album, onSaved }: { album: Album; onSaved: (album: Albu
     finally { setAiBusy(""); }
   };
   return <form className="editor-panel metadata-panel" onSubmit={save}>
-    <header><div><span className="eyebrow">Release metadata</span><h1>{form.title}</h1><p>Imported values remain editable; future Suno syncs do not overwrite your finished copy.</p></div><button className="primary-button" disabled={busy}><Save />{busy ? "Saving…" : "Save metadata"}</button></header>
+    <header><div><span className="eyebrow">Release metadata</span><h1>{form.title}</h1><p>“Sync new” preserves your edits. “Refresh all” deliberately replaces Suno-owned metadata.</p></div><button className="primary-button" disabled={busy}><Save />{busy ? "Saving…" : "Save metadata"}</button></header>
     <div className="form-grid">
       <label className="wide">Album title<input value={form.title} onChange={(event) => field("title", event.target.value)} /></label>
       <label>URL slug<input value={form.slug} onChange={(event) => field("slug", event.target.value)} /></label>
@@ -185,7 +185,7 @@ function TracksPanel({ album, reload, confirm }: { album: Album; reload: () => P
   return <section className="editor-panel"><header><div><span className="eyebrow">Tracks & source audio</span><h1>{album.title}</h1><p>Put the songs in order and approve each quota-counted download before it starts.</p></div></header>
     <div className="admin-track-list">{tracks.map(({ track }, index) => <article key={track.id}>
       <span className="track-number">{(index + 1).toString().padStart(2, "0")}</span><button className="mini-cover" aria-label={`Edit ${track.title}`} style={{ backgroundImage: `url(${track.cover_url || album.cover_url})` }} onClick={() => setSelectedId(track.id)} />
-      <div><h3>{track.title}</h3><p>{track.audio_status === "saved" ? "MP3 + WAV saved" : "Metadata synced; audio remains at Suno"}</p></div>
+      <div><h3>{track.title}</h3><p>{track.release_date && <>{track.release_date} · </>}{track.audio_status === "saved" ? "MP3 + WAV saved" : "Metadata synced; audio remains at Suno"}</p></div>
       <span>{seconds(Number(track.duration_seconds || 0))}</span><span className={`status-pill ${track.audio_status === "saved" ? "success" : ""}`}>{track.audio_status}</span>
       <div className="row-actions"><button onClick={() => setSelectedId(track.id)}>Edit</button><button onClick={() => void reorder(index, -1)} disabled={index === 0}><ChevronUp /></button><button onClick={() => void reorder(index, 1)} disabled={index === tracks.length - 1}><ChevronDown /></button>{track.audio_status !== "saved" && <button className="download-action" onClick={() => void requestDownload(track)}><Download /> Request audio</button>}</div>
     </article>)}</div>
@@ -207,7 +207,7 @@ function TrackMetadataForm({ track, reload }: { track: Track; reload: () => Prom
   const save = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setSaved(false);
     await patch<Track>(`/api/studio/tracks/${track.id}/`, {
-      title: form.title, slug: form.slug, description: form.description, lyrics: form.lyrics,
+      title: form.title, slug: form.slug, description: form.description, release_date: form.release_date || null, lyrics: form.lyrics,
       explicit: form.explicit, instrumental: form.instrumental, isrc: form.isrc,
     });
     if (cover) {
@@ -239,6 +239,7 @@ function TrackMetadataForm({ track, reload }: { track: Track; reload: () => Prom
     <div className="form-grid">
       <label>Song title<input value={form.title} onChange={(event) => field("title", event.target.value)} /></label>
       <label>URL slug<input value={form.slug} onChange={(event) => field("slug", event.target.value)} /></label>
+      <label>Release date<input type="date" value={form.release_date || ""} onChange={(event) => field("release_date", event.target.value)} /></label>
       <label className="wide">Description<textarea rows={3} value={form.description} onChange={(event) => field("description", event.target.value)} /></label>
       <div className="ai-tool wide"><Sparkles /><div><strong>Help me describe this song</strong><p>Uses the lyrics, your style notes, and what is already written.</p><input value={aiStyle} onChange={(event) => setAiStyle(event.target.value)} placeholder="Playful folk-pop, bedtime song, inside joke…" /></div><button type="button" className="secondary-button" disabled={Boolean(aiBusy)} onClick={() => void writeDescription()}>{aiBusy === "description" ? "Writing…" : "Draft description"}</button></div>
       <label>ISRC<input value={form.isrc} onChange={(event) => field("isrc", event.target.value)} placeholder="Assigned after first delivery" /></label>

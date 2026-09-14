@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Count, DecimalField, Sum
+from django.db.models import Count, DecimalField, F, Sum
 from django.db.models.functions import Coalesce
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
@@ -13,12 +13,22 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from .integrations.musixmatch import MusixmatchClient
+from .integrations.openai import OpenAIClient
 from .integrations.suno import SunoClient
 from .integrations.too_lost import TooLostClient
-from .integrations.openai import OpenAIClient
-from .integrations.musixmatch import MusixmatchClient
 from .lyrics import parse_lrc, to_lrc
-from .models import Album, Artist, AuditEvent, DistributionSubmission, DownloadRequest, IntegrationCredential, PlatformLink, SyncRun, Track
+from .models import (
+    Album,
+    Artist,
+    AuditEvent,
+    DistributionSubmission,
+    DownloadRequest,
+    IntegrationCredential,
+    PlatformLink,
+    SyncRun,
+    Track,
+)
 from .permissions import IsStudioAdmin
 from .secrets import load_credentials, masked_credentials, save_credentials
 from .serializers import (
@@ -36,12 +46,12 @@ from .services import (
     clone_album_for_replacement,
     create_submission,
     create_takedown_submission,
-    refresh_submission,
     generate_cover,
     generate_description,
     prepare_album_lyrics_delivery,
-    sync_track_lyrics,
+    refresh_submission,
     suno_download_budget,
+    sync_track_lyrics,
     validate_release,
 )
 from .tasks import download_audio_task, submit_release_task, submit_takedown_task, sync_suno_task
@@ -96,7 +106,7 @@ def album_queryset(public_only=False):
                 output_field=DecimalField(max_digits=12, decimal_places=3),
             ),
         )
-        .order_by("-release_date", "-created_at")
+        .order_by(F("release_date").desc(nulls_last=True), "-created_at")
     )
     return queryset.filter(public=True) if public_only else queryset
 
@@ -251,7 +261,7 @@ class AlbumViewSet(viewsets.ModelViewSet):
 class TrackViewSet(viewsets.ModelViewSet):
     serializer_class = TrackSerializer
     permission_classes = [IsStudioAdmin]
-    queryset = Track.objects.select_related("artist").all()
+    queryset = Track.objects.select_related("artist").order_by(F("release_date").desc(nulls_last=True), "-created_at")
 
     @action(detail=True, methods=["post"])
     def import_lrc(self, request, pk=None):
@@ -260,7 +270,15 @@ class TrackViewSet(viewsets.ModelViewSet):
         track.lyrics_alignment_source = "manual"
         track.lyrics_alignment_status = "needs_review"
         track.musixmatch_delivery_status = "ready"
-        track.save(update_fields=["timed_lyrics", "lyrics_alignment_source", "lyrics_alignment_status", "musixmatch_delivery_status", "updated_at"])
+        track.save(
+            update_fields=[
+                "timed_lyrics",
+                "lyrics_alignment_source",
+                "lyrics_alignment_status",
+                "musixmatch_delivery_status",
+                "updated_at",
+            ]
+        )
         return Response(self.get_serializer(track).data)
 
     @action(detail=True, methods=["get"])
@@ -430,7 +448,10 @@ def verify_integration(request, service):
 def sync_runs(request):
     if request.method == "GET":
         return Response(SyncRunSerializer(SyncRun.objects.order_by("-created_at", "-pk")[:20], many=True).data)
-    run = SyncRun.objects.create()
+    mode = request.data.get("mode", SyncRun.Mode.INCREMENTAL)
+    if mode not in SyncRun.Mode.values:
+        return Response({"detail": "Sync mode must be incremental or full."}, status=400)
+    run = SyncRun.objects.create(mode=mode)
     transaction.on_commit(lambda: sync_suno_task.delay(run.pk))
     return Response(SyncRunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
 
