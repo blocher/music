@@ -32,6 +32,7 @@ On macOS with iTerm installed, double-click `StartLocherSongsDev.app` for the co
 Suno has no supported account API. The app stores an encrypted session ID and cookie captured from a Suno session, refreshes short-lived bearer tokens, limits sync traffic, imports playlists only, and requires a deliberate confirmation before requesting or saving audio. Suno credentials and passwords are never requested by the app.
 
 Too Lost uses OAuth 2.0 and a versioned REST API. Register the deployment in the Too Lost developer portal, then configure a sandbox access token in Studio → Integrations. Submission payloads are stored as immutable snapshots for auditing and retry safety.
+After a successful submission, a bounded background poll checks Too Lost every six hours for up to 30 days (configurable with `TOO_LOST_STATUS_POLL_SECONDS` and `TOO_LOST_STATUS_POLL_ATTEMPTS`). Album, artist, and track store URLs and platform IDs are imported automatically when Too Lost exposes them; the manual store-link editor remains available for exceptions.
 
 OpenAI credentials are configured in Studio → Integrations and are used only for explicit description/cover generation or as a lyric-alignment fallback. Alignment tries Suno first, normalizes its seconds-based line and word data, checks transcription similarity, and uses OpenAI against a previously confirmed local audio file when Suno data is absent or weak. Every result remains editable.
 

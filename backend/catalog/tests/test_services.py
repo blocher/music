@@ -114,6 +114,33 @@ class CatalogServiceTests(TestCase):
         self.assertEqual(album.status, Album.Status.LIVE)
         self.assertEqual(PlatformLink.objects.count(), 2)
 
+    def test_distribution_update_accepts_nested_and_camel_case_store_links(self):
+        album = Album.objects.create(artist=self.artist, title="Night Rooms", slug="night-rooms")
+        track = self.track("First", "clip-1", "USAAA2600001")
+        AlbumTrack.objects.create(album=album, track=track, position=1)
+
+        apply_distribution_update(
+            album,
+            {
+                "storeLinks": {
+                    "Spotify": {"href": "https://open.spotify.com/album/123", "store_id": "123"}
+                },
+                "tracks": [
+                    {
+                        "isrc": track.isrc,
+                        "platformLinks": [
+                            {"store_name": "Apple", "store_url": "https://music.apple.com/song/456", "platform_id": "456"}
+                        ],
+                    }
+                ],
+            },
+        )
+
+        album_link = PlatformLink.objects.get(object_id=str(album.pk))
+        track_link = PlatformLink.objects.get(object_id=str(track.pk))
+        self.assertEqual(album_link.external_id, "123")
+        self.assertEqual(track_link.platform, PlatformLink.Platform.APPLE)
+
     @patch("catalog.services.load_credentials", return_value={"session_id": "session", "cookie": "cookie"})
     @patch("catalog.services.SunoClient")
     def test_sync_imports_playlist_tracks_only_and_reports_loose_songs(self, client_class, _credentials):

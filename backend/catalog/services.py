@@ -258,20 +258,47 @@ def _normalize_platform(value: str) -> str:
 def _save_links(instance, links) -> None:
     content_type = ContentType.objects.get_for_model(instance)
     if isinstance(links, dict):
-        links = [{"platform": platform, "url": url} for platform, url in links.items()]
+        normalized = []
+        for platform, value in links.items():
+            if isinstance(value, dict):
+                normalized.append({"platform": platform, **value})
+            else:
+                normalized.append({"platform": platform, "url": value})
+        links = normalized
     for link in links or []:
         if not isinstance(link, dict):
             continue
-        url = link.get("url") or link.get("link")
-        platform = link.get("platform") or link.get("store") or link.get("name")
+        url = link.get("url") or link.get("link") or link.get("href") or link.get("store_url")
+        platform = link.get("platform") or link.get("store") or link.get("store_name") or link.get("dsp") or link.get("name")
         if not url or not platform:
             continue
         PlatformLink.objects.update_or_create(
             platform=_normalize_platform(str(platform)),
             content_type=content_type,
             object_id=str(instance.pk),
-            defaults={"url": url, "external_id": str(link.get("id") or link.get("external_id") or "")},
+            defaults={
+                "url": url,
+                "external_id": str(
+                    link.get("id") or link.get("external_id") or link.get("store_id") or link.get("platform_id") or ""
+                ),
+            },
         )
+
+
+def _distribution_links(data: dict):
+    for key in (
+        "store_links",
+        "storeLinks",
+        "platform_links",
+        "platformLinks",
+        "dsp_links",
+        "destinations",
+        "links",
+        "platforms",
+    ):
+        if data.get(key):
+            return data[key]
+    return []
 
 
 @transaction.atomic
@@ -293,8 +320,8 @@ def apply_distribution_update(album: Album, payload: dict) -> Album:
             album.withdrawn_at = timezone.now()
         album.save(update_fields=["status", "public", "withdrawn_at", "updated_at"])
 
-    _save_links(album, data.get("store_links") or data.get("links") or data.get("platforms"))
-    _save_links(album.artist, data.get("artist_links"))
+    _save_links(album, _distribution_links(data))
+    _save_links(album.artist, data.get("artist_links") or data.get("artistLinks"))
     tracks_by_isrc = {track.isrc: track for track in album.tracks.exclude(isrc="")}
     tracks_by_remote_id = {track.too_lost_track_id: track for track in album.tracks.exclude(too_lost_track_id="")}
     for remote_track in data.get("tracks", []):
@@ -306,9 +333,7 @@ def apply_distribution_update(album: Album, payload: dict) -> Album:
         if not track.too_lost_track_id and remote_track.get("id"):
             track.too_lost_track_id = str(remote_track["id"])
             track.save(update_fields=["too_lost_track_id", "updated_at"])
-        _save_links(
-            track, remote_track.get("store_links") or remote_track.get("links") or remote_track.get("platforms")
-        )
+        _save_links(track, _distribution_links(remote_track))
     return album
 
 
