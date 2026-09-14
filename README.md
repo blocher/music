@@ -33,6 +33,10 @@ Suno has no supported account API. The app stores an encrypted session ID and co
 
 Too Lost uses OAuth 2.0 and a versioned REST API. Register the deployment in the Too Lost developer portal, then configure a sandbox access token in Studio → Integrations. Submission payloads are stored as immutable snapshots for auditing and retry safety.
 
+OpenAI credentials are configured in Studio → Integrations and are used only for explicit description/cover generation or as a lyric-alignment fallback. Alignment tries Suno first, normalizes its seconds-based line and word data, checks transcription similarity, and uses OpenAI against a previously confirmed local audio file when Suno data is absent or weak. Every result remains editable.
+
+Musixmatch credentials are also stored encrypted. The public API key can be verified without storing a Musixmatch password. The studio prepares a normalized synced-lyrics package for every vocal track whenever a release is submitted or refreshed. Musixmatch does not offer a general artist write API, so automated delivery is enabled only when Musixmatch provides a partner write token and endpoint; otherwise tracks are marked `needs_partner_access` and can be completed in Musixmatch Pro.
+
 ## Deployment
 
 Production follows the Daily Office host pattern: push to a bare Git repository on the Linode host; its post-receive hook checks out the tree, installs Python and Node dependencies, builds React, migrates and collects static files, then restarts Gunicorn and Celery via systemd. See `deploy/`.

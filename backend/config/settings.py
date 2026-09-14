@@ -118,6 +118,8 @@ CREDENTIAL_ENCRYPTION_KEY = os.getenv("CREDENTIAL_ENCRYPTION_KEY", "")
 SUNO_API_BASE_URL = os.getenv("SUNO_API_BASE_URL", "https://studio-api.prod.suno.com")
 SUNO_AUTH_BASE_URL = os.getenv("SUNO_AUTH_BASE_URL", "https://auth.suno.com")
 TOO_LOST_API_BASE_URL = os.getenv("TOO_LOST_API_BASE_URL", "https://api.toolost.com")
+OPENAI_API_BASE_URL = os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1")
+MUSIXMATCH_API_BASE_URL = os.getenv("MUSIXMATCH_API_BASE_URL", "https://api.musixmatch.com/ws/1.1")
 TOO_LOST_OAUTH_AUTHORIZE_URL = os.getenv(
     "TOO_LOST_OAUTH_AUTHORIZE_URL", "https://developer.toolost.com/oauth/authorize"
 )

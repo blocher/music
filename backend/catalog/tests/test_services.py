@@ -25,6 +25,8 @@ from catalog.services import (
     suno_download_budget,
     sync_suno,
     validate_release,
+    prepare_album_lyrics_delivery,
+    sync_track_lyrics,
 )
 
 
@@ -168,6 +170,37 @@ class CatalogServiceTests(TestCase):
 
         self.assertEqual(budget["used"], 1)
         self.assertEqual(budget["remaining"], 19)
+
+    @patch("catalog.services.load_credentials", return_value={"session_id": "session"})
+    @patch("catalog.services.SunoClient")
+    def test_suno_alignment_is_normalized_and_saved(self, client_class, _credentials):
+        track = self.track("First", "clip-1")
+        client_class.return_value.aligned_lyrics.return_value = {
+            "hoot_cer": 0.05,
+            "aligned_lyrics": [{"start_s": 2, "end_s": 4, "text": "Sing together"}],
+        }
+
+        sync_track_lyrics(track)
+
+        track.refresh_from_db()
+        self.assertEqual(track.timed_lyrics[0]["start_ms"], 2000)
+        self.assertEqual(track.lyrics_alignment_source, "suno")
+        self.assertEqual(track.lyrics_alignment_status, "ready")
+
+    @patch("catalog.services.load_credentials", return_value={})
+    def test_delivery_marks_partner_access_boundary(self, _credentials):
+        album = Album.objects.create(artist=self.artist, title="Family", slug="family")
+        track = self.track("First", "clip-1")
+        track.lyrics = "Sing together"
+        track.timed_lyrics = [{"start_ms": 1000, "end_ms": 2000, "text": "Sing together"}]
+        track.save()
+        AlbumTrack.objects.create(album=album, track=track, position=1)
+
+        result = prepare_album_lyrics_delivery(album)
+
+        track.refresh_from_db()
+        self.assertEqual(result["needs_partner_access"], 1)
+        self.assertEqual(track.musixmatch_delivery_status, "needs_partner_access")
 
 
 class ReadyReleaseTests(TestCase):

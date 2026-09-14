@@ -92,6 +92,15 @@ class Track(TimestampedModel):
     wav_file = models.FileField(upload_to="tracks/wav/", blank=True)
     audio_status = models.CharField(max_length=24, choices=AudioStatus.choices, default=AudioStatus.REMOTE)
     source_payload = models.JSONField(default=dict, blank=True)
+    lyrics_alignment_source = models.CharField(max_length=24, blank=True)
+    lyrics_alignment_status = models.CharField(max_length=32, default="not_started")
+    lyrics_alignment_confidence = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    lyrics_alignment_details = models.JSONField(default=dict, blank=True)
+    lyrics_aligned_at = models.DateTimeField(null=True, blank=True)
+    musixmatch_delivery_status = models.CharField(max_length=32, default="not_ready")
+    musixmatch_track_id = models.CharField(max_length=120, blank=True)
+    musixmatch_last_error = models.TextField(blank=True)
+    musixmatch_submitted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]
@@ -143,6 +152,8 @@ class IntegrationCredential(TimestampedModel):
     class Service(models.TextChoices):
         SUNO = "suno", "Suno"
         TOO_LOST = "too_lost", "Too Lost"
+        OPENAI = "openai", "OpenAI"
+        MUSIXMATCH = "musixmatch", "Musixmatch"
 
     service = models.CharField(max_length=32, choices=Service.choices, unique=True)
     encrypted_payload = models.TextField()

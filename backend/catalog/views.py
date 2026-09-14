@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Count, DecimalField, Sum
 from django.db.models.functions import Coalesce
@@ -14,8 +15,10 @@ from rest_framework.response import Response
 
 from .integrations.suno import SunoClient
 from .integrations.too_lost import TooLostClient
+from .integrations.openai import OpenAIClient
+from .integrations.musixmatch import MusixmatchClient
 from .lyrics import parse_lrc, to_lrc
-from .models import Album, Artist, AuditEvent, DistributionSubmission, DownloadRequest, PlatformLink, SyncRun, Track
+from .models import Album, Artist, AuditEvent, DistributionSubmission, DownloadRequest, IntegrationCredential, PlatformLink, SyncRun, Track
 from .permissions import IsStudioAdmin
 from .secrets import load_credentials, masked_credentials, save_credentials
 from .serializers import (
@@ -34,6 +37,10 @@ from .services import (
     create_submission,
     create_takedown_submission,
     refresh_submission,
+    generate_cover,
+    generate_description,
+    prepare_album_lyrics_delivery,
+    sync_track_lyrics,
     suno_download_budget,
     validate_release,
 )
@@ -174,6 +181,39 @@ class AlbumViewSet(viewsets.ModelViewSet):
         return Response({"valid": not (errors := validate_release(self.get_object())), "errors": errors})
 
     @action(detail=True, methods=["post"])
+    def generate_description(self, request, id=None):
+        album = self.get_object()
+        lyrics = "\n\n".join(track.lyrics for track in album.tracks.all() if track.lyrics)
+        try:
+            description = generate_description(
+                title=album.title,
+                lyrics=lyrics,
+                style=request.data.get("style", ""),
+                existing=request.data.get("existing_description", album.description),
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"description": description})
+
+    @action(detail=True, methods=["post"])
+    def generate_cover(self, request, id=None):
+        album = self.get_object()
+        try:
+            content, extension = generate_cover(
+                title=album.title,
+                prompt=request.data.get("prompt", "Cheerful, colorful, approachable artwork"),
+                source_image=request.FILES.get("source_image"),
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        album.cover.save(f"ai-{album.id}.{extension}", ContentFile(content))
+        return Response(self.get_serializer(album).data)
+
+    @action(detail=True, methods=["post"])
+    def deliver_lyrics(self, request, id=None):
+        return Response(prepare_album_lyrics_delivery(self.get_object()))
+
+    @action(detail=True, methods=["post"])
     def replacement(self, request, id=None):
         replacement = clone_album_for_replacement(
             self.get_object(), request.data.get("new_track_ids", []), request.user
@@ -217,7 +257,10 @@ class TrackViewSet(viewsets.ModelViewSet):
     def import_lrc(self, request, pk=None):
         track = self.get_object()
         track.timed_lyrics = parse_lrc(request.data.get("lrc", ""))
-        track.save(update_fields=["timed_lyrics", "updated_at"])
+        track.lyrics_alignment_source = "manual"
+        track.lyrics_alignment_status = "needs_review"
+        track.musixmatch_delivery_status = "ready"
+        track.save(update_fields=["timed_lyrics", "lyrics_alignment_source", "lyrics_alignment_status", "musixmatch_delivery_status", "updated_at"])
         return Response(self.get_serializer(track).data)
 
     @action(detail=True, methods=["get"])
@@ -227,9 +270,38 @@ class TrackViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def sync_lyrics(self, request, pk=None):
         track = self.get_object()
-        data = SunoClient(load_credentials("suno")).aligned_lyrics(track.suno_clip_id)
-        track.timed_lyrics = data.get("aligned_lyrics") or data.get("lyrics") or data.get("words") or []
-        track.save(update_fields=["timed_lyrics", "updated_at"])
+        try:
+            sync_track_lyrics(track, force_openai=bool(request.data.get("force_openai")))
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(self.get_serializer(track).data)
+
+    @action(detail=True, methods=["post"])
+    def generate_description(self, request, pk=None):
+        track = self.get_object()
+        try:
+            description = generate_description(
+                title=track.title,
+                lyrics=request.data.get("lyrics", track.lyrics),
+                style=request.data.get("style", ""),
+                existing=request.data.get("existing_description", track.description),
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"description": description})
+
+    @action(detail=True, methods=["post"])
+    def generate_cover(self, request, pk=None):
+        track = self.get_object()
+        try:
+            content, extension = generate_cover(
+                title=track.title,
+                prompt=request.data.get("prompt", "Cheerful, colorful, approachable artwork"),
+                source_image=request.FILES.get("source_image"),
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        track.cover.save(f"ai-{track.id}.{extension}", ContentFile(content))
         return Response(self.get_serializer(track).data)
 
 
@@ -320,7 +392,7 @@ class PlatformLinkViewSet(viewsets.ModelViewSet):
 @api_view(["GET", "PUT"])
 @permission_classes([IsStudioAdmin])
 def integration_view(request, service):
-    if service not in {"suno", "too_lost"}:
+    if service not in {"suno", "too_lost", "openai", "musixmatch"}:
         return Response({"detail": "Unknown integration."}, status=404)
     if request.method == "GET":
         return Response(masked_credentials(service))
@@ -333,12 +405,23 @@ def integration_view(request, service):
 @api_view(["POST"])
 @permission_classes([IsStudioAdmin])
 def verify_integration(request, service):
-    if service == "suno":
-        result = SunoClient(load_credentials(service)).account()
-    elif service == "too_lost":
-        result = TooLostClient(load_credentials(service)).releases()
-    else:
-        return Response({"detail": "Unknown integration."}, status=404)
+    try:
+        if service == "suno":
+            result = SunoClient(load_credentials(service)).account()
+        elif service == "too_lost":
+            result = TooLostClient(load_credentials(service)).releases()
+        elif service == "openai":
+            result = OpenAIClient(load_credentials(service)).verify()
+        elif service == "musixmatch":
+            result = MusixmatchClient(load_credentials(service)).verify()
+        else:
+            return Response({"detail": "Unknown integration."}, status=404)
+    except Exception as exc:
+        return Response({"detail": str(exc)}, status=400)
+    credential = IntegrationCredential.objects.get(service=service)
+    credential.last_verified_at = timezone.now()
+    credential.last_error = ""
+    credential.save(update_fields=["last_verified_at", "last_error", "updated_at"])
     return Response({"ok": True, "result": result})
 
 

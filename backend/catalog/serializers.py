@@ -57,6 +57,15 @@ class TrackSerializer(serializers.ModelSerializer):
             "description",
             "lyrics",
             "timed_lyrics",
+            "lyrics_alignment_source",
+            "lyrics_alignment_status",
+            "lyrics_alignment_confidence",
+            "lyrics_alignment_details",
+            "lyrics_aligned_at",
+            "musixmatch_delivery_status",
+            "musixmatch_track_id",
+            "musixmatch_last_error",
+            "musixmatch_submitted_at",
             "cover",
             "cover_url",
             "explicit",
@@ -71,7 +80,20 @@ class TrackSerializer(serializers.ModelSerializer):
             "wav_download_url",
             "platform_links",
         ]
-        read_only_fields = ["suno_clip_id", "audio_status", "too_lost_track_id"]
+        read_only_fields = [
+            "suno_clip_id",
+            "audio_status",
+            "too_lost_track_id",
+            "lyrics_alignment_source",
+            "lyrics_alignment_status",
+            "lyrics_alignment_confidence",
+            "lyrics_alignment_details",
+            "lyrics_aligned_at",
+            "musixmatch_delivery_status",
+            "musixmatch_track_id",
+            "musixmatch_last_error",
+            "musixmatch_submitted_at",
+        ]
         extra_kwargs = {"cover": {"write_only": True, "required": False}}
 
     def get_platform_links(self, obj):
@@ -88,6 +110,23 @@ class TrackSerializer(serializers.ModelSerializer):
 
     def get_wav_download_url(self, obj):
         return obj.wav_file.url if obj.wav_file else ""
+
+    def update(self, instance, validated_data):
+        timing_changed = "timed_lyrics" in validated_data
+        instance = super().update(instance, validated_data)
+        if timing_changed:
+            instance.lyrics_alignment_source = "manual"
+            instance.lyrics_alignment_status = "needs_review"
+            instance.musixmatch_delivery_status = "ready" if instance.timed_lyrics else "not_ready"
+            instance.save(
+                update_fields=[
+                    "lyrics_alignment_source",
+                    "lyrics_alignment_status",
+                    "musixmatch_delivery_status",
+                    "updated_at",
+                ]
+            )
+        return instance
 
 
 class AlbumTrackSerializer(serializers.ModelSerializer):

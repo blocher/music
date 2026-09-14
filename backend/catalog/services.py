@@ -9,6 +9,9 @@ from django.utils.text import slugify
 
 from .integrations.suno import SunoClient
 from .integrations.too_lost import TooLostClient
+from .integrations.openai import OpenAIClient
+from .integrations.musixmatch import MusixmatchClient, MusixmatchPartnerAccessRequired
+from .lyrics import align_transcription_to_lyrics, lyric_text_similarity, normalize_suno_alignment, timed_lyrics_payload
 from .models import (
     Album,
     AlbumTrack,
@@ -241,6 +244,7 @@ def submit_release(submission: DistributionSubmission) -> DistributionSubmission
     submission.album.status = Album.Status.SUBMITTED
     submission.album.save(update_fields=["too_lost_release_id", "status", "updated_at"])
     apply_distribution_update(submission.album, data)
+    prepare_album_lyrics_delivery(submission.album)
     return submission
 
 
@@ -323,7 +327,110 @@ def refresh_submission(submission: DistributionSubmission) -> DistributionSubmis
         submission.status = DistributionSubmission.Status.FAILED
     submission.save(update_fields=["response_payload", "status", "completed_at", "updated_at"])
     apply_distribution_update(submission.album, result)
+    prepare_album_lyrics_delivery(submission.album)
     return submission
+
+
+def sync_track_lyrics(track: Track, *, force_openai: bool = False) -> Track:
+    suno_error = ""
+    if not force_openai:
+        try:
+            raw = SunoClient(load_credentials("suno")).aligned_lyrics(track.suno_clip_id)
+            cues, details = normalize_suno_alignment(raw)
+            details["text_similarity"] = lyric_text_similarity(cues, track.lyrics)
+            details["confidence"] = min(details["confidence"], details["text_similarity"])
+            if cues and details["confidence"] >= 0.72:
+                track.timed_lyrics = cues
+                track.lyrics_alignment_source = "suno"
+                track.lyrics_alignment_status = "ready" if details["complete"] else "needs_review"
+                track.lyrics_alignment_confidence = details["confidence"]
+                track.lyrics_alignment_details = details
+                track.lyrics_aligned_at = timezone.now()
+                track.musixmatch_delivery_status = "ready"
+                track.save()
+                return track
+            suno_error = "Suno timing was missing or below the quality threshold."
+        except Exception as exc:
+            suno_error = str(exc)
+
+    audio = track.wav_file or track.mp3_file
+    if not audio:
+        track.lyrics_alignment_status = "needs_audio"
+        track.lyrics_alignment_details = {
+            "suno_error": suno_error,
+            "message": "Save a confirmed MP3/WAV before using OpenAI alignment.",
+        }
+        track.save(update_fields=["lyrics_alignment_status", "lyrics_alignment_details", "updated_at"])
+        raise ValueError("Suno timing is unavailable. Save the confirmed audio before using OpenAI alignment.")
+    transcript = OpenAIClient(load_credentials("openai")).transcribe(audio, lyrics=track.lyrics)
+    cues, confidence = align_transcription_to_lyrics(transcript, track.lyrics)
+    if not cues:
+        raise ValueError("OpenAI returned audio transcription but no usable lyric timing.")
+    track.timed_lyrics = cues
+    track.lyrics_alignment_source = "openai"
+    track.lyrics_alignment_status = "ready" if confidence >= 0.82 else "needs_review"
+    track.lyrics_alignment_confidence = confidence
+    track.lyrics_alignment_details = {"confidence": confidence, "suno_error": suno_error, "line_count": len(cues)}
+    track.lyrics_aligned_at = timezone.now()
+    track.musixmatch_delivery_status = "ready"
+    track.save()
+    return track
+
+
+def generate_description(*, title: str, lyrics: str, style: str, existing: str = "") -> str:
+    return OpenAIClient(load_credentials("openai")).generate_description(
+        title=title, lyrics=lyrics, style=style, existing=existing
+    )
+
+
+def generate_cover(*, title: str, prompt: str, source_image=None) -> tuple[bytes, str]:
+    expanded = f"Release title: {title}. Creative direction: {prompt}"
+    return OpenAIClient(load_credentials("openai")).generate_image(prompt=expanded, source_image=source_image)
+
+
+def prepare_album_lyrics_delivery(album: Album) -> dict:
+    """Attempt supported partner delivery and persist an honest status for every track."""
+    try:
+        credentials = load_credentials("musixmatch")
+    except Exception:
+        credentials = {}
+    client = MusixmatchClient(credentials)
+    summary = {"submitted": 0, "needs_partner_access": 0, "not_ready": 0, "failed": 0}
+    for track in album.tracks.all():
+        if track.instrumental:
+            track.musixmatch_delivery_status = "not_applicable"
+            track.musixmatch_last_error = ""
+        elif not track.lyrics or not track.timed_lyrics:
+            track.musixmatch_delivery_status = "not_ready"
+            track.musixmatch_last_error = "Plain and timed lyrics are required."
+            summary["not_ready"] += 1
+        else:
+            try:
+                result = client.publish_synced_lyrics(timed_lyrics_payload(track))
+                data = result.get("data", result)
+                track.musixmatch_delivery_status = "submitted"
+                track.musixmatch_track_id = str(data.get("track_id") or data.get("id") or "")
+                track.musixmatch_last_error = ""
+                track.musixmatch_submitted_at = timezone.now()
+                summary["submitted"] += 1
+            except MusixmatchPartnerAccessRequired as exc:
+                track.musixmatch_delivery_status = "needs_partner_access"
+                track.musixmatch_last_error = str(exc)
+                summary["needs_partner_access"] += 1
+            except Exception as exc:
+                track.musixmatch_delivery_status = "failed"
+                track.musixmatch_last_error = str(exc)
+                summary["failed"] += 1
+        track.save(
+            update_fields=[
+                "musixmatch_delivery_status",
+                "musixmatch_track_id",
+                "musixmatch_last_error",
+                "musixmatch_submitted_at",
+                "updated_at",
+            ]
+        )
+    return summary
 
 
 @transaction.atomic

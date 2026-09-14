@@ -43,13 +43,19 @@ export function IntegrationsPage() {
   return (
     <div className="integrations-page">
       <Link className="back-link" to="/studio"><ArrowLeft /> Back to releases</Link>
-      <header className="page-intro"><span className="eyebrow">Studio settings</span><h1>Hook up the helpers.</h1><p>Suno brings songs in. Too Lost sends finished releases out. Secrets stay encrypted and are never shown again.</p></header>
+      <header className="page-intro"><span className="eyebrow">Studio settings</span><h1>Hook up the helpers.</h1><p>Suno brings songs in, OpenAI helps finish the creative details, and Too Lost sends releases out. Secrets stay encrypted and are never shown again.</p></header>
       <div className="integration-grid">
         <IntegrationForm service="suno" title="Suno" fields={[{ key: "session_id", label: "Clerk session ID", secret: true, placeholder: "sess_…" }, { key: "cookie", label: "Suno Cookie request header", secret: true, placeholder: "Paste the complete Cookie header" }, { key: "account_email", label: "Account email (for your reference)" }, { key: "monthly_download_limit", label: "Monthly song-download allowance", placeholder: "20" }]}>
           <p>Sign in at <a href="https://suno.com" target="_blank" rel="noreferrer">suno.com <ExternalLink size={13} /></a>, then copy the session ID from the token request URL and the complete Cookie request header from the browser network inspector. The studio never asks for your Suno password.</p>
         </IntegrationForm>
         <IntegrationForm service="too_lost" title="Too Lost" fields={[{ key: "access_token", label: "OAuth access token or API key", secret: true }, { key: "api_base_url", label: "API base URL", placeholder: "https://api.toolost.com" }, { key: "create_release_path", label: "Create release path", placeholder: "/v2/releases" }]}>
           <p>Register this site in the <a href="https://developer.toolost.com" target="_blank" rel="noreferrer">Too Lost developer portal <ExternalLink size={13} /></a>. Use its sandbox token first; switch to production only after a complete validation pass.</p>
+        </IntegrationForm>
+        <IntegrationForm service="openai" title="OpenAI" fields={[{ key: "api_key", label: "API key", secret: true, placeholder: "sk-…" }, { key: "organization", label: "Organization (optional)" }, { key: "project", label: "Project (optional)" }, { key: "text_model", label: "Writing model", placeholder: "gpt-5-mini" }, { key: "transcription_model", label: "Alignment model", placeholder: "whisper-1" }, { key: "image_model", label: "Image model", placeholder: "gpt-image-2" }]}>
+          <p>Used only when you click an AI button or when Suno timing is unavailable. Descriptions and covers stay editable; OpenAI alignment requires a confirmed saved audio file.</p>
+        </IntegrationForm>
+        <IntegrationForm service="musixmatch" title="Musixmatch" fields={[{ key: "account_email", label: "Account email (for your reference)" }, { key: "api_key", label: "API key", secret: true }, { key: "artist_id", label: "Musixmatch artist ID" }, { key: "api_base_url", label: "API base URL", placeholder: "https://api.musixmatch.com/ws/1.1" }, { key: "partner_token", label: "Partner write token", secret: true }, { key: "publish_path", label: "Partner publish endpoint" }]}>
+          <p>The app never stores your Musixmatch password. A verified Pro artist can manage lyrics in Musixmatch; supported one-click delivery here activates only if Musixmatch gives your account a partner write token and endpoint.</p>
         </IntegrationForm>
       </div>
       <aside className="security-note"><ShieldCheck /><div><h3>No surprise clicks</h3><p>Suno sync is low-volume. Audio is not copied during sync. Each MP3/WAV save and every distributor submission has its own review and confirmation step.</p></div><CheckCircle2 /></aside>

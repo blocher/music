@@ -29,6 +29,15 @@ export type Track = {
   description: string;
   lyrics: string;
   timed_lyrics: TimedLyric[];
+  lyrics_alignment_source: string;
+  lyrics_alignment_status: string;
+  lyrics_alignment_confidence: string | null;
+  lyrics_alignment_details: Record<string, unknown>;
+  lyrics_aligned_at: string | null;
+  musixmatch_delivery_status: string;
+  musixmatch_track_id: string;
+  musixmatch_last_error: string;
+  musixmatch_submitted_at: string | null;
   cover_url: string;
   explicit: boolean;
   instrumental: boolean;

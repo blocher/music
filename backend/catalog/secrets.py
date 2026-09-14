@@ -56,6 +56,13 @@ def masked_credentials(service: str) -> dict:
             "monthly_download_limit",
             "api_base_url",
             "create_release_path",
+            "artist_id",
+            "publish_path",
+            "text_model",
+            "transcription_model",
+            "image_model",
+            "organization",
+            "project",
         }:
             visible[key] = value
         elif value:
