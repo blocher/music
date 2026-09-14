@@ -43,7 +43,7 @@ export function IntegrationsPage() {
   return (
     <div className="integrations-page">
       <Link className="back-link" to="/studio"><ArrowLeft /> Back to releases</Link>
-      <header className="page-intro"><span className="eyebrow">Studio settings</span><h1>Connections you control.</h1><p>Secrets are encrypted before they reach the database and are never shown again.</p></header>
+      <header className="page-intro"><span className="eyebrow">Studio settings</span><h1>Hook up the helpers.</h1><p>Suno brings songs in. Too Lost sends finished releases out. Secrets stay encrypted and are never shown again.</p></header>
       <div className="integration-grid">
         <IntegrationForm service="suno" title="Suno" fields={[{ key: "session_id", label: "Clerk session ID", secret: true, placeholder: "sess_…" }, { key: "cookie", label: "Suno Cookie request header", secret: true, placeholder: "Paste the complete Cookie header" }, { key: "account_email", label: "Account email (for your reference)" }, { key: "monthly_download_limit", label: "Monthly song-download allowance", placeholder: "20" }]}>
           <p>Sign in at <a href="https://suno.com" target="_blank" rel="noreferrer">suno.com <ExternalLink size={13} /></a>, then copy the session ID from the token request URL and the complete Cookie request header from the browser network inspector. The studio never asks for your Suno password.</p>
@@ -52,7 +52,7 @@ export function IntegrationsPage() {
           <p>Register this site in the <a href="https://developer.toolost.com" target="_blank" rel="noreferrer">Too Lost developer portal <ExternalLink size={13} /></a>. Use its sandbox token first; switch to production only after a complete validation pass.</p>
         </IntegrationForm>
       </div>
-      <aside className="security-note"><ShieldCheck /><div><h3>Deliberate by design</h3><p>Suno sync is low-volume. Audio is not copied during sync. Each MP3/WAV save and every distributor submission has its own review and confirmation step.</p></div><CheckCircle2 /></aside>
+      <aside className="security-note"><ShieldCheck /><div><h3>No surprise clicks</h3><p>Suno sync is low-volume. Audio is not copied during sync. Each MP3/WAV save and every distributor submission has its own review and confirmation step.</p></div><CheckCircle2 /></aside>
     </div>
   );
 }

@@ -7,15 +7,15 @@ import type { Artist } from "../types";
 export function AboutPage() {
   const [artist, setArtist] = useState<Artist | null>(null);
   useEffect(() => { void api<Artist>("/api/public/artist/").then(setArtist); }, []);
-  if (!artist) return <div className="loading-screen">Opening the artist notes…</div>;
+  if (!artist) return <div className="loading-screen">Finding the family notes…</div>;
   return (
     <article className="about-page">
-      <div className="about-portrait" style={{ backgroundImage: artist.portrait_url ? `url(${artist.portrait_url})` : undefined }} />
+      <div className="about-portrait" style={{ backgroundImage: `url(${artist.portrait_url || "/images/locher-family-band.webp"})` }} />
       <div className="about-copy">
-        <span className="eyebrow">Artist notes</span>
+        <span className="eyebrow">About the songs</span>
         <h1>{artist.name}</h1>
-        <p className="lead">Independent music made with machines, patience, and human intention.</p>
-        <div className="prose">{artist.bio || "Benjamin Locher makes records for attentive listening: songs shaped by atmosphere, memory, technology, and the small human decisions that give a generated sound a life of its own."}</div>
+        <p className="lead">Songs for the kitchen, the car, and wherever we wind up.</p>
+        <div className="prose">{artist.bio || "Locher songs are little family experiments: ideas from ordinary days, made into music with a lot of curiosity and a little help from AI. Pick one, turn it up, and join in."}</div>
         <PlatformLinks links={artist.platform_links} />
       </div>
     </article>

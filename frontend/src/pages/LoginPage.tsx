@@ -32,17 +32,17 @@ export function LoginPage() {
 
   return (
     <main className="login-page">
-      <section className="login-art"><span>Private release desk</span><h1>From first spark<br />to finished record.</h1><p>Benjamin Locher / independent sounds</p></section>
+      <section className="login-art"><div><span>Behind the songs</span><h1>Welcome to the family studio!</h1><p>This is where we get the music ready to share.</p></div><img src="/images/locher-family-band.webp" alt="The illustrated Locher family making music" /></section>
       <section className="login-panel">
         <LockKeyhole />
-        <span className="eyebrow">Release Studio</span>
-        <h2>Welcome back.</h2>
-        <p>Sign in to sync, shape, and deliver the next record.</p>
+        <span className="eyebrow">Family studio</span>
+        <h2>Come on in.</h2>
+        <p>Sign in to keep the songs moving.</p>
         <form onSubmit={submit}>
           <label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           {error && <div className="form-error">{error}</div>}
-          <button className="primary-button" disabled={busy}>{busy ? "Opening…" : "Enter the studio"}<ArrowRight /></button>
+          <button className="primary-button" disabled={busy}>{busy ? "Opening…" : "Sign in"}<ArrowRight /></button>
         </form>
       </section>
     </main>

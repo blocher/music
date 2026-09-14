@@ -8,14 +8,14 @@ import { PlayerBar } from "./PlayerBar";
 
 function Wordmark() {
   return (
-    <Link className="wordmark" to="/" aria-label="Benjamin Locher records">
-      <span>Benjamin Locher</span>
-      <small>Independent sounds / collected works</small>
+    <Link className="wordmark" to="/" aria-label="Locher songs home">
+      <span><em>Locher</em> songs</span>
+      <small>Made at home · played everywhere</small>
     </Link>
   );
 }
 
-function Nav({ studio = false }: { studio?: boolean }) {
+function Nav() {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -23,11 +23,11 @@ function Nav({ studio = false }: { studio?: boolean }) {
         {open ? <X /> : <Menu />}
       </button>
       <nav className={open ? "main-nav open" : "main-nav"} onClick={() => setOpen(false)}>
-        <NavLink to="/">Records</NavLink>
+        <NavLink to="/">Listen</NavLink>
         <NavLink to="/about">About</NavLink>
         <span className="nav-rule" />
         <NavLink className="studio-link" to="/studio">
-          {studio ? "Release Studio" : "Private studio"} <span aria-hidden>↗</span>
+          Family studio <span aria-hidden>↗</span>
         </NavLink>
       </nav>
     </>
@@ -69,10 +69,10 @@ export function StudioLayout() {
     <div className="site-shell studio-shell">
       <header className="site-header studio-header">
         <Wordmark />
-        <Nav studio />
+        <Nav />
       </header>
       <div className="studio-utility">
-        <span>Private release desk</span>
+        <span>Our behind-the-scenes music desk</span>
         <NavLink to="/studio/integrations"><Settings size={16} /> Integrations</NavLink>
         <button onClick={signOut}><LogOut size={16} /> Sign out</button>
       </div>

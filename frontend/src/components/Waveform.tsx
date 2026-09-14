@@ -6,9 +6,10 @@ export function Waveform({ progress = 0, onSeek }: { progress?: number; onSeek?:
       className="waveform"
       aria-label="Seek through track"
       onClick={(event) => onSeek?.(event.nativeEvent.offsetX / event.currentTarget.clientWidth)}
-      style={{ "--progress": `${Math.max(0, Math.min(progress, 1)) * 100}%` } as React.CSSProperties}
     >
-      {bars.map((height, index) => <i key={index} style={{ height }} />)}
+      {bars.map((height, index) => (
+        <i className={index / bars.length <= progress ? "active" : ""} key={index} style={{ height }} />
+      ))}
     </button>
   );
 }

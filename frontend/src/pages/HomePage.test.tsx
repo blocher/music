@@ -13,7 +13,7 @@ describe("HomePage", () => {
 
     render(<MemoryRouter><PlayerProvider><HomePage /></PlayerProvider></MemoryRouter>);
 
-    await waitFor(() => expect(screen.getByText(/Music for the/)).toBeInTheDocument());
-    expect(screen.getByText(/first records are being prepared/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Our family makes songs/)).toBeInTheDocument());
+    expect(screen.getByText(/getting the first songs ready/i)).toBeInTheDocument();
   });
 });

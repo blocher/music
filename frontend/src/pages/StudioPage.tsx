@@ -53,7 +53,7 @@ export function StudioPage() {
   return (
     <div className="studio-page">
       <section className="studio-title-row">
-        <div><span className="eyebrow">Release Studio</span><h1>Records in progress.</h1><p>Sync a playlist, finish the details, then send it into the world.</p></div>
+        <div><span className="eyebrow">Family studio</span><h1>Songs in progress.</h1><p>Sync a playlist, tidy up the details, and share it when it’s ready.</p></div>
         <button className="primary-button" disabled={!suno?.connected || syncing} onClick={startSync}><RefreshCw className={syncing ? "spinning" : ""} />{syncing ? "Syncing Suno…" : "Sync from Suno"}</button>
       </section>
       {error && <div className="banner error"><CircleAlert />{error}</div>}
@@ -65,7 +65,7 @@ export function StudioPage() {
         <div><span className="eyebrow">Download allowance</span><strong>{budget ? `${budget.used} / ${budget.limit}` : "—"}</strong><small>{budget ? `${budget.remaining} songs remain this month` : "Every save requires confirmation"}</small></div>
       </section>
       <section className="release-list-section">
-        <header><div><span className="eyebrow">Catalog desk</span><h2>{albums.length ? `${albums.length} records` : "No synced playlists yet"}</h2></div><Link className="text-button" to="/studio/integrations">Integrations <ArrowRight /></Link></header>
+        <header><div><span className="eyebrow">Our albums</span><h2>{albums.length ? `${albums.length} albums` : "No synced playlists yet"}</h2></div><Link className="text-button" to="/studio/integrations">Integrations <ArrowRight /></Link></header>
         <div className="studio-album-grid">
           {albums.map((album) => (
             <Link className="studio-album-card" to={`/studio/releases/${album.id}`} key={album.id}>

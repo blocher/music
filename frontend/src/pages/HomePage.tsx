@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Download, Play } from "lucide-react";
+import { ArrowRight, Play } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
@@ -21,59 +21,59 @@ export function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="loading-screen">Gathering the records…</div>;
+  if (loading) return <div className="loading-screen">Finding the songs…</div>;
   if (!albums.length) {
     return (
-      <section className="empty-catalog">
-        <span className="eyebrow">Benjamin Locher / collected works</span>
-        <h1>Music for the<br />space between.</h1>
-        <p>The first records are being prepared for listening.</p>
-        <div className="fine-rule" />
-        <small>Independent sounds · AI-assisted · Human intention</small>
-      </section>
+      <>
+        <section className="family-hero">
+          <div className="hero-copy">
+            <span className="eyebrow">Songs for real life</span>
+            <h1>Our family makes songs.</h1>
+            <p className="hero-deck">Come have a listen. These are songs for the kitchen, the car, and everywhere else.</p>
+          </div>
+          <img className="family-hero-art" src="/images/locher-family-band.webp" alt="A cheerful illustrated portrait of the six-member Locher family making music together" />
+        </section>
+        <section className="empty-catalog">
+          <span className="eyebrow">Almost ready</span>
+          <h2>We’re getting the first songs ready.</h2>
+          <p>Check back soon for something new to play.</p>
+        </section>
+      </>
     );
   }
 
-  const [featured, ...others] = albums;
+  const [featured] = albums;
   const firstTrack = featured.album_tracks?.[0]?.track;
   return (
     <>
-      <section className="record-hero">
-        <Link className="cover-frame" to={`/records/${featured.slug}`}>
-          <img src={featured.cover_url} alt={`${featured.title} cover`} />
-          <span className="cover-catalog">{featured.catalog_number || "NEW RECORD"}</span>
-        </Link>
+      <section className="family-hero">
         <div className="hero-copy">
-          <span className="eyebrow">New album — {featured.catalog_number || "independent release"}</span>
-          <h1>{featured.title}</h1>
-          <p className="hero-deck">{featured.description || "A new collection of songs by Benjamin Locher."}</p>
+          <span className="eyebrow">Songs for real life</span>
+          <h1>Our family makes songs.</h1>
+          <p className="hero-deck">Come have a listen. These are songs for the kitchen, the car, and everywhere else.</p>
+          <p className="newest-album">Newest album: <Link to={`/records/${featured.slug}`}>{featured.title}</Link></p>
           <div className="hero-actions">
             {firstTrack?.stream_url && (
-              <button className="primary-button" onClick={() => player.play(firstTrack, featured)}><Play /> Play the album</button>
+              <button className="primary-button" onClick={() => player.play(firstTrack, featured)}><Play /> Play our songs</button>
             )}
-            {firstTrack?.wav_download_url && <a className="text-button" href={firstTrack.wav_download_url} download><Download /> Download WAV</a>}
+            <a className="secondary-button" href="#albums">Browse albums <ArrowRight /></a>
           </div>
-          <div className="record-facts">
-            <span>{featured.track_count} tracks</span><span>{featured.release_date?.slice(0, 4)}</span><span>Benjamin Locher</span>
-          </div>
-          <Link className="story-link" to={`/records/${featured.slug}`}>Enter the record <ArrowRight /></Link>
+        </div>
+        <img className="family-hero-art" src="/images/locher-family-band.webp" alt="A cheerful illustrated portrait of the six-member Locher family making music together" />
+      </section>
+      <section className="catalog-grid-section" id="albums">
+        <div className="section-heading"><span className="eyebrow">Pick a little soundtrack</span><h2>Albums for whatever today is doing.</h2></div>
+        <div className="album-grid">
+          {albums.map((album) => (
+            <Link className="album-card" to={`/records/${album.slug}`} key={album.id}>
+              <img src={album.cover_url} alt={`${album.title} cover`} />
+              <span>{album.track_count} songs · {album.release_date?.slice(0, 4)}</span>
+              <h3>{album.title}</h3>
+              <p>{album.description}</p>
+            </Link>
+          ))}
         </div>
       </section>
-      {others.length > 0 && (
-        <section className="catalog-grid-section">
-          <div className="section-heading"><span className="eyebrow">Earlier works</span><h2>Records for slower listening.</h2></div>
-          <div className="album-grid">
-            {others.map((album) => (
-              <Link className="album-card" to={`/records/${album.slug}`} key={album.id}>
-                <img src={album.cover_url} alt="" />
-                <span>{album.release_date?.slice(0, 4)}</span>
-                <h3>{album.title}</h3>
-                <p>{album.description}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
     </>
   );
 }

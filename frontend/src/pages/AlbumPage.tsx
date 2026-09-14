@@ -22,14 +22,14 @@ export function AlbumPage() {
     const next = cues[index + 1];
     return player.currentTime * 1000 >= cue.start_ms && (!next || player.currentTime * 1000 < next.start_ms);
   }), [selected, player.currentTime]);
-  if (!album) return <div className="loading-screen">Opening the record…</div>;
+  if (!album) return <div className="loading-screen">Finding the album…</div>;
 
   return (
     <article className="album-page">
       <section className="album-story">
         <img className="album-cover-large" src={album.cover_url} alt={`${album.title} cover`} />
         <div>
-          <span className="eyebrow">Release story</span>
+          <span className="eyebrow">About this album</span>
           <h1>{album.title}</h1>
           <p className="album-description">{album.description}</p>
           <div className="record-facts"><span>{album.track_count} tracks</span><span>{album.release_date}</span><span>{album.catalog_number}</span></div>
@@ -37,7 +37,7 @@ export function AlbumPage() {
         </div>
       </section>
       <section className="track-section">
-        <header><span className="eyebrow">Tracks</span><h2>Listen & read</h2></header>
+        <header><div><span className="eyebrow">Songs</span><h2>Pick one and press play.</h2></div></header>
         <div className="track-list">
           {album.album_tracks?.map(({ track, position }) => {
             const isPlaying = player.playing && player.track?.id === track.id;

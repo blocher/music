@@ -25,6 +25,8 @@ python backend/manage.py runserver
 
 Run `npm run dev --prefix frontend` in another terminal. The Vite dev server proxies `/api` to Django.
 
+On macOS with iTerm installed, double-click `StartLocherSongsDev.app` for the complete local workspace. It opens named panes for the Redis broker, Django backend, Vite frontend, Celery queue worker, and a working shell. Every pane starts in this project with `.venv` activated; the launcher uses port 6381 for its isolated local Redis instance.
+
 ## Integration posture
 
 Suno has no supported account API. The app stores an encrypted session ID and cookie captured from a Suno session, refreshes short-lived bearer tokens, limits sync traffic, imports playlists only, and requires a deliberate confirmation before requesting or saving audio. Suno credentials and passwords are never requested by the app.
