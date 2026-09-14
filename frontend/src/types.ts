@@ -68,6 +68,7 @@ export type Album = {
   album_tracks?: AlbumTrack[];
   too_lost_release_id?: string;
   replaces_id?: string | null;
+  has_replacements?: boolean;
   latest_submission?: { id: number; kind: string; status: string; too_lost_id: string; error: string } | null;
 };
 

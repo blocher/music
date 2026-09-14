@@ -137,6 +137,7 @@ class AlbumListSerializer(serializers.ModelSerializer):
 class AlbumDetailSerializer(AlbumListSerializer):
     album_tracks = AlbumTrackSerializer(many=True, read_only=True)
     replaces_id = serializers.UUIDField(read_only=True, allow_null=True)
+    has_replacements = serializers.SerializerMethodField()
     latest_submission = serializers.SerializerMethodField()
 
     class Meta(AlbumListSerializer.Meta):
@@ -148,6 +149,7 @@ class AlbumDetailSerializer(AlbumListSerializer):
             "production_line",
             "too_lost_release_id",
             "replaces_id",
+            "has_replacements",
             "latest_submission",
             "album_tracks",
             "created_at",
@@ -166,6 +168,9 @@ class AlbumDetailSerializer(AlbumListSerializer):
             "too_lost_id": submission.too_lost_id,
             "error": submission.error,
         }
+
+    def get_has_replacements(self, obj):
+        return obj.replacements.exists()
 
 
 class SyncRunSerializer(serializers.ModelSerializer):

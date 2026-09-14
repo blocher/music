@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CloudUpload, Download, ExternalLink, FileAudio, Image, Link2, ListMusic, Music2, RefreshCw, Save, ShieldCheck, Sparkles } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CloudUpload, Download, ExternalLink, FileAudio, Image, Link2, ListMusic, Music2, RefreshCw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api, patch, post } from "../api";
 import { PlatformLinks } from "../components/PlatformLinks";
@@ -11,6 +11,7 @@ type Paged<T> = { count: number; results: T[] };
 type Tab = "metadata" | "tracks" | "lyrics" | "delivery" | "links";
 type Validation = { valid: boolean; errors: Array<{ field: string; message: string }> };
 type Submission = { id: number; status: string; validation_errors: Validation["errors"] };
+type ConfirmAction = { title: string; body: string; action: () => Promise<void>; confirmLabel?: string; danger?: boolean };
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof Music2 }> = [
   { id: "metadata", label: "Metadata", icon: Music2 },
@@ -24,11 +25,12 @@ const seconds = (value: number) => `${Math.floor(value / 60)}:${Math.floor(value
 
 export function ReleaseEditorPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [album, setAlbum] = useState<Album | null>(null);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [tab, setTab] = useState<Tab>("metadata");
   const [message, setMessage] = useState("");
-  const [confirming, setConfirming] = useState<{ title: string; body: string; action: () => Promise<void> } | null>(null);
+  const [confirming, setConfirming] = useState<ConfirmAction | null>(null);
 
   const load = useCallback(async () => {
     const [release, tracks] = await Promise.all([
@@ -39,6 +41,17 @@ export function ReleaseEditorPage() {
   }, [id]);
   useEffect(() => { void load(); }, [load]);
   if (!album) return <div className="loading-screen">Opening the album workspace…</div>;
+  const canDelete = ["draft", "ready"].includes(album.status) && !album.too_lost_release_id && !album.latest_submission && !album.has_replacements;
+  const requestDelete = () => setConfirming({
+    title: `Delete “${album.title}”?`,
+    body: "This permanently removes the album and its public page from Locher songs. The songs and any saved audio stay safely in your library. Albums sent to music stores must be taken down instead.",
+    confirmLabel: "Delete album",
+    danger: true,
+    action: async () => {
+      await api<void>(`/api/studio/albums/${album.id}/`, { method: "DELETE" });
+      navigate("/studio", { replace: true });
+    },
+  });
 
   return (
     <div className="release-editor">
@@ -66,13 +79,18 @@ export function ReleaseEditorPage() {
         <strong>{album.public ? "Visible to listeners" : "Private draft"}</strong>
         <PlatformLinks links={album.platform_links} />
         {album.replaces_id && <div className="replacement-badge"><ShieldCheck />Replacement version<br /><small>Original stays live until this is accepted.</small></div>}
+        <div className="album-danger-zone">
+          <span className="eyebrow">Album controls</span>
+          <button className="danger-button" disabled={!canDelete} onClick={requestDelete}><Trash2 />Delete album</button>
+          <small>{canDelete ? "Removes this album, but keeps its songs and audio." : "Distributed albums and albums with release history cannot be deleted."}</small>
+        </div>
       </aside>
       {confirming && <ConfirmOverlay {...confirming} close={() => setConfirming(null)} />}
     </div>
   );
 }
 
-function ConfirmOverlay({ title, body, action, close }: { title: string; body: string; action: () => Promise<void>; close: () => void }) {
+function ConfirmOverlay({ title, body, action, close, confirmLabel = "Confirm", danger = false }: ConfirmAction & { close: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const run = async () => {
@@ -80,7 +98,7 @@ function ConfirmOverlay({ title, body, action, close }: { title: string; body: s
     try { await action(); close(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "The action could not be completed."); setBusy(false); }
   };
-  return <div className="modal-backdrop"><section className="confirm-modal"><span className="eyebrow">Confirm action</span><h2>{title}</h2><p>{body}</p>{error && <div className="banner error"><CircleAlert />{error}</div>}<div className="form-actions"><button className="secondary-button" onClick={close}>Go back</button><button className="primary-button" disabled={busy} onClick={() => void run()}>{busy ? "Working…" : "Confirm"}</button></div></section></div>;
+  return <div className="modal-backdrop"><section className="confirm-modal"><span className="eyebrow">Confirm action</span><h2>{title}</h2><p>{body}</p>{error && <div className="banner error"><CircleAlert />{error}</div>}<div className="form-actions"><button className="secondary-button" onClick={close}>Go back</button><button className={danger ? "danger-button" : "primary-button"} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : confirmLabel}</button></div></section></div>;
 }
 
 function MetadataPanel({ album, onSaved }: { album: Album; onSaved: (album: Album) => void }) {
@@ -118,7 +136,7 @@ function MetadataPanel({ album, onSaved }: { album: Album; onSaved: (album: Albu
   </form>;
 }
 
-function TracksPanel({ album, reload, confirm }: { album: Album; reload: () => Promise<void>; confirm: React.Dispatch<React.SetStateAction<{ title: string; body: string; action: () => Promise<void> } | null>> }) {
+function TracksPanel({ album, reload, confirm }: { album: Album; reload: () => Promise<void>; confirm: React.Dispatch<React.SetStateAction<ConfirmAction | null>> }) {
   const tracks = album.album_tracks || [];
   const [selectedId, setSelectedId] = useState(tracks[0]?.track.id || "");
   const selected = tracks.find(({ track }) => track.id === selectedId)?.track || tracks[0]?.track;
@@ -205,7 +223,7 @@ function LyricsPanel({ album, reload }: { album: Album; reload: () => Promise<vo
   </section>;
 }
 
-function DeliveryPanel({ album, allTracks, reload, confirm }: { album: Album; allTracks: Track[]; reload: () => Promise<void>; confirm: React.Dispatch<React.SetStateAction<{ title: string; body: string; action: () => Promise<void> } | null>> }) {
+function DeliveryPanel({ album, allTracks, reload, confirm }: { album: Album; allTracks: Track[]; reload: () => Promise<void>; confirm: React.Dispatch<React.SetStateAction<ConfirmAction | null>> }) {
   const [validation, setValidation] = useState<Validation | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const existingIds = new Set(album.album_tracks?.map((item) => item.track.id));

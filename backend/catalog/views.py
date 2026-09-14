@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Count, DecimalField, Sum
 from django.db.models.functions import Coalesce
@@ -14,7 +15,7 @@ from rest_framework.response import Response
 from .integrations.suno import SunoClient
 from .integrations.too_lost import TooLostClient
 from .lyrics import parse_lrc, to_lrc
-from .models import Album, Artist, DistributionSubmission, DownloadRequest, PlatformLink, SyncRun, Track
+from .models import Album, Artist, AuditEvent, DistributionSubmission, DownloadRequest, PlatformLink, SyncRun, Track
 from .permissions import IsStudioAdmin
 from .secrets import load_credentials, masked_credentials, save_credentials
 from .serializers import (
@@ -123,6 +124,50 @@ class AlbumViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         return AlbumListSerializer if self.action == "list" else AlbumDetailSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        album_id = self.get_object().pk
+        with transaction.atomic():
+            album = Album.objects.select_for_update().get(pk=album_id)
+            if album.status not in {Album.Status.DRAFT, Album.Status.READY} or album.too_lost_release_id:
+                return Response(
+                    {
+                        "detail": (
+                            "Only unpublished draft or ready albums can be deleted. "
+                            "Take down a distributed release instead."
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if album.submissions.exists():
+                return Response(
+                    {"detail": "This album has distribution history and cannot be deleted."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if album.replacements.exists():
+                return Response(
+                    {"detail": "This album is the source of a replacement version and cannot be deleted."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            title = album.title
+            track_count = album.album_tracks.count()
+            cover_name = album.cover.name if album.cover else ""
+            cover_storage = album.cover.storage if cover_name else None
+            content_type = ContentType.objects.get_for_model(Album)
+            PlatformLink.objects.filter(content_type=content_type, object_id=str(album.pk)).delete()
+            album.delete()
+            AuditEvent.objects.create(
+                actor=request.user,
+                action="album.deleted",
+                object_type="Album",
+                object_id=str(album_id),
+                details={"title": title, "tracks_preserved": track_count},
+            )
+            if cover_name and cover_storage:
+                transaction.on_commit(lambda: cover_storage.delete(cover_name))
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get"])
     def validate(self, request, id=None):
